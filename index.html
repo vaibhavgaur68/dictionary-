@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dictionary</title>
+    <style>
+        body {
+            font-family: 'SF Pro Text', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #8a2be2 0%, #0072ff 50%, #7fff00 100%);
+            background-size: 400% 400%;
+            animation: gradientBackground 15s ease infinite;
+        }
+
+        @keyframes gradientBackground {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        #app {
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: rgba(255, 255, 255, 0.7);
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+
+        #search-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"] {
+            padding: 10px;
+            font-size: 16px;
+            width: 70%;
+            max-width: 300px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        #suggestions-container {
+            position: relative;
+            width: 70%;
+            max-width: 300px;
+            margin: 0 auto;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            display: none;
+        }
+
+        .suggestion-item {
+            padding: 10px;
+            cursor: pointer;
+        }
+
+        .suggestion-item:hover {
+            background-color: #f0f0f0;
+        }
+
+        button {
+            padding: 10px 15px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            margin: 5px;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        #result-container {
+            margin-top: 20px;
+        }
+
+        .result-item {
+            border-bottom: 1px solid #ddd;
+            padding: 10px 0;
+        }
+
+        .result-item:last-child {
+            border-bottom: none;
+        }
+
+        .word {
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .definition {
+            font-size: 16px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <h1>Dictionary</h1>
+        <div id="search-container">
+            <input type="text" id="word-input" placeholder="Enter a word...">
+            <div id="suggestions-container"></div>
+            <button id="search-button">Search</button>
+        </div>
+        <div id="result-container"></div>
+    </div>
+
+    <script>
+        const wordInput = document.getElementById('word-input');
+        const suggestionsContainer = document.getElementById('suggestions-container');
+        const resultContainer = document.getElementById('result-container');
+
+        wordInput.addEventListener('input', debounce(handleInput, 300));
+
+        function handleInput() {
+            const inputValue = wordInput.value.trim();
+
+            if (inputValue.length > 0) {
+                fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${inputValue}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.title && data.title === "No Definitions Found") {
+                            resultContainer.innerHTML = `<div class="result-item"><p class="word">No definitions found for "${inputValue}".</p></div>`;
+                        } else {
+                            displayDefinitions(data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching the definition:', error);
+                        resultContainer.innerHTML = '<div class="result-item"><p class="word">Error fetching the definition. Please try again later.</p></div>';
+                    });
+
+                fetch(`https://api.dictionaryapi.dev/api/v2/relatedWords/en/${inputValue}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        displaySuggestions(data);
+                    })
+                    .catch(error => {
+                        console.error('Error fetching suggestions:', error);
+                        clearSuggestions();
+                    });
+            } else {
+                clearSuggestions();
+                resultContainer.innerHTML = '';
+            }
+        }
+
+        function displayDefinitions(data) {
+            resultContainer.innerHTML = ''; // Clear previous results
+            data[0].meanings.forEach(meaning => {
+                meaning.definitions.forEach(definition => {
+                    const resultItem = document.createElement('div');
+                    resultItem.classList.add('result-item');
+
+                    const wordElement = document.createElement('div');
+                    wordElement.classList.add('word');
+                    wordElement.textContent = wordInput.value.trim();
+
+                    const definitionElement = document.createElement('div');
+                    definitionElement.classList.add('definition');
+                    definitionElement.textContent = definition.definition;
+
+                    resultItem.appendChild(wordElement);
+                    resultItem.appendChild(definitionElement);
+
+                    resultContainer.appendChild(resultItem);
+                });
+            });
+        }
+
+        function displaySuggestions(data) {
+            const suggestions = data[0]?.words || [];
+            suggestionsContainer.innerHTML = '';
+            suggestions.forEach(word => {
+                const suggestionItem = document.createElement('div');
+                suggestionItem.classList.add('suggestion-item');
+                suggestionItem.textContent = word;
+                suggestionItem.addEventListener('click', () => {
+                    wordInput.value = word;
+                    suggestionsContainer.innerHTML = '';
+                    searchWord();
+                });
+                suggestionsContainer.appendChild(suggestionItem);
+            });
+            suggestionsContainer.style.display = 'block';
+        }
+
+        function clearSuggestions() {
+            suggestionsContainer.innerHTML = '';
+            suggestionsContainer.style.display = 'none';
+        }
+
+        document.getElementById('search-button').addEventListener('click', searchWord);
+
+        wordInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                searchWord();
+            }
+        });
+
+        function searchWord() {
+            const word = wordInput.value.trim();
+            if (word) {
+                fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${word}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.title && data.title === "No Definitions Found") {
+                            resultContainer.innerHTML = `<div class="result-item"><p class="word">No definitions found for "${word}".</p></div>`;
+                        } else {
+                            displayDefinitions(data);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching the definition:', error);
+                        resultContainer.innerHTML = '<div class="result-item"><p class="word">Error fetching the definition. Please try again later.</p></div>';
+                    });
+            }
+        }
+
+        // Utility function to debounce input events
+        function debounce(func, timeout) {
+            let timer;
+            return function() {
+                const context = this;
+                const args = arguments;
+                clearTimeout(timer);
+                timer = setTimeout(() => {
+                    func.apply(context, args);
+                }, timeout);
+            };
+        }
+    </script>
+</body>
+</html>
